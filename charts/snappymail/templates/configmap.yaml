@@ -21,8 +21,20 @@ data:
   application.ini: |
     {{- . | nindent 4 }}
   {{- end }}
+  {{/*
+  Each domain entry is deep-merged with a stub Sieve block before being
+  serialized. SnappyMail's Sieve\Settings::fromArray extends
+  ConnectSettings::fromArray, which unconditionally reads `host` — so
+  even when sieve is disabled the parser crashes if the Sieve dict is
+  missing host/port/type. Stubbing them with localhost defaults lets
+  the user supply just `Sieve: {enabled: false}` (or omit Sieve entirely)
+  without hitting a "Cannot assign null to property ConnectSettings::$host"
+  error at login. The user's values still win on conflict.
+  */}}
+  {{- $sieveDefaults := dict "host" "localhost" "port" 4190 "type" 0 "enabled" false }}
   {{- range $name, $body := .Values.config.domains }}
+  {{- $merged := merge (deepCopy $body) (dict "Sieve" $sieveDefaults "whiteList" "") }}
   {{ printf "domain.%s.json" $name }}: |-
-    {{- $body | toJson | nindent 4 }}
+    {{- $merged | toJson | nindent 4 }}
   {{- end }}
 {{- end }}

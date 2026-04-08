@@ -2,7 +2,7 @@ apiVersion: v2
 name: snappymail
 description: SnappyMail webmail (nginx + php-fpm) for Kubernetes. Connects to external IMAP/SMTP servers.
 type: application
-version: 0.2.0
+version: 0.2.1
 appVersion: "2.38.2"
 home: https://snappymail.eu
 sources:
