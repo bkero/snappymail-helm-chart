@@ -1,2 +1,27 @@
 apiVersion: v1
-entries: {}
+entries:
+  snappymail:
+  - apiVersion: v2
+    appVersion: 2.38.2
+    created: "2026-04-08T04:52:56.027033198Z"
+    description: SnappyMail webmail (nginx + php-fpm) for Kubernetes. Connects to
+      external IMAP/SMTP servers.
+    digest: a00ce03041b0df837117226102b54e6f91ce85cec3636e928994614c6e831e43
+    home: https://snappymail.eu
+    icon: https://snappymail.eu/img/logo-256x256-white.png
+    keywords:
+    - webmail
+    - email
+    - imap
+    - smtp
+    - php
+    maintainers:
+    - name: bkero
+    name: snappymail
+    sources:
+    - https://github.com/the-djmaze/snappymail
+    type: application
+    urls:
+    - https://github.com/bkero/snappymail-helm-chart/releases/download/snappymail-0.1.1/snappymail-0.1.1.tgz
+    version: 0.1.1
+generated: "2026-04-08T04:52:56.027039109Z"
