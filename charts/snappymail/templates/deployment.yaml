@@ -51,6 +51,10 @@ spec:
             - name: {{ $k }}
               value: {{ $v | quote }}
             {{- end }}
+            {{- with .Values.admin.login }}
+            - name: SNAPPYMAIL_ADMIN_LOGIN
+              value: {{ . | quote }}
+            {{- end }}
             {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -67,6 +71,8 @@ spec:
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts:
+            # SnappyMail's data tree is bootstrapped fresh on every start
+            # and overlaid from the ConfigMap/Secret mounts below.
             - name: data
               mountPath: /var/lib/snappymail
             # readOnlyRootFilesystem requires writable scratch space for the
@@ -81,17 +87,23 @@ spec:
               mountPath: /var/lib/nginx
             - name: nginx-log
               mountPath: /var/log/nginx
+            {{- if or .Values.config.applicationIni .Values.config.domains }}
+            - name: overlay
+              mountPath: /etc/snappymail-overlay
+              readOnly: true
+            {{- end }}
+            {{- if or .Values.admin.password .Values.admin.existingSecret }}
+            - name: admin-secret
+              mountPath: /etc/snappymail-secret
+              readOnly: true
+            {{- end }}
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
       volumes:
         - name: data
-          {{- if .Values.persistence.enabled }}
-          persistentVolumeClaim:
-            claimName: {{ include "snappymail.pvcName" . }}
-          {{- else }}
-          emptyDir: {}
-          {{- end }}
+          emptyDir:
+            sizeLimit: 64Mi
         - name: run
           emptyDir:
             medium: Memory
@@ -108,6 +120,28 @@ spec:
         - name: nginx-log
           emptyDir:
             sizeLimit: 16Mi
+        {{- if or .Values.config.applicationIni .Values.config.domains }}
+        - name: overlay
+          configMap:
+            name: {{ include "snappymail.fullname" . }}-overlay
+            items:
+              {{- if .Values.config.applicationIni }}
+              - key: application.ini
+                path: application.ini
+              {{- end }}
+              {{- range $name, $_ := .Values.config.domains }}
+              - key: {{ printf "domain.%s.json" $name | quote }}
+                path: {{ printf "domains/%s.json" $name | quote }}
+              {{- end }}
+        {{- end }}
+        {{- if or .Values.admin.password .Values.admin.existingSecret }}
+        - name: admin-secret
+          secret:
+            secretName: {{ if .Values.admin.existingSecret }}{{ .Values.admin.existingSecret }}{{ else }}{{ include "snappymail.fullname" . }}-admin{{ end }}
+            items:
+              - key: {{ .Values.admin.existingSecretKey | default "admin_password" }}
+                path: admin_password
+        {{- end }}
         {{- with .Values.extraVolumes }}
         {{- toYaml . | nindent 8 }}
         {{- end }}

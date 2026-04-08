@@ -21,16 +21,32 @@ SnappyMail has been installed.
   Open http://127.0.0.1:8888 in your browser.
 {{- end }}
 
-2. Retrieve the auto-generated admin password (created on first boot):
+2. Log into the admin panel at:    http(s)://<host>/?admin
 
-  POD=$(kubectl --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/instance={{ .Release.Name }} -o jsonpath='{.items[0].metadata.name}')
-  kubectl --namespace {{ .Release.Namespace }} exec -it "$POD" -- cat /var/lib/snappymail/_data_/_default_/admin_password.txt
+{{- if or .Values.admin.password .Values.admin.existingSecret }}
 
-   Then log into the admin panel at:    http(s)://<host>/?admin
+   Username: {{ .Values.admin.login | default "admin" }}
+   Password: (the cleartext value from
+   {{- if .Values.admin.existingSecret }} secret/{{ .Values.admin.existingSecret }}, key {{ .Values.admin.existingSecretKey | default "admin_password" }}{{- else }} .Values.admin.password{{- end }})
+{{- else }}
 
-3. Configure your external IMAP/SMTP servers and (optionally) database from
-   the admin panel. This chart does not deploy a database or a mail server —
-   point SnappyMail at your existing services.
+   No admin password was supplied via values, so SnappyMail generated a
+   random one on first boot. Because /var/lib/snappymail is an ephemeral
+   emptyDir, this password is regenerated on every pod restart — you
+   should set .Values.admin.password (or .Values.admin.existingSecret) for
+   any non-throwaway deployment.
 
-4. Tunables can be set under .Values.env in values.yaml. See `helm show values
+   To grab the current one:
+
+     POD=$(kubectl --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/instance={{ .Release.Name }} -o jsonpath='{.items[0].metadata.name}')
+     kubectl --namespace {{ .Release.Namespace }} exec -it "$POD" -- \
+         cat /var/lib/snappymail/_data_/_default_/admin_password.txt
+{{- end }}
+
+3. Configure your external IMAP/SMTP servers from the admin panel, or
+   bake them in via .Values.config.applicationIni and .Values.config.domains
+   so the chart owns them. This chart does not deploy a database or a mail
+   server — point SnappyMail at your existing services.
+
+4. Runtime tunables live under .Values.env. See `helm show values
    {{ .Chart.Name }}` for the full list.

@@ -61,17 +61,6 @@ Service account name
 {{- end }}
 
 {{/*
-PVC name (or existing claim if set).
-*/}}
-{{- define "snappymail.pvcName" -}}
-{{- if .Values.persistence.existingClaim }}
-{{- .Values.persistence.existingClaim }}
-{{- else }}
-{{- include "snappymail.fullname" . }}-data
-{{- end }}
-{{- end }}
-
-{{/*
 Image reference, falling back to .Chart.AppVersion when image.tag is empty.
 */}}
 {{- define "snappymail.image" -}}

@@ -19,17 +19,18 @@ fullnameOverride: ""
 # -----------------------------------------------------------------------------
 # Replicas / update strategy
 #
-# SnappyMail keeps user-visible state (configs, contacts cache, file uploads)
-# on disk under /var/lib/snappymail. With ReadWriteOnce storage you must keep
-# replicaCount: 1. To run multiple replicas you need ReadWriteMany storage,
-# *and* you should be aware that SnappyMail is not designed for clustered
-# operation — sessions and file locking are best-effort.
+# This chart deploys SnappyMail stateless: /var/lib/snappymail is an emptyDir
+# that is bootstrapped fresh on every container start, and configuration is
+# layered in from a ConfigMap (config.*) and a Secret (admin.*) below.
+#
+# SnappyMail itself is not designed for clustered operation — sessions and
+# file locking are best-effort, so running replicaCount > 1 is not advised
+# unless you front it with sticky-session affinity.
 # -----------------------------------------------------------------------------
 replicaCount: 1
 
-# Recreate is safest with RWO PVCs. Switch to RollingUpdate when using RWX.
 strategy:
-  type: Recreate
+  type: RollingUpdate
 
 # -----------------------------------------------------------------------------
 # Service account
@@ -106,18 +107,69 @@ resources:
     memory: 256Mi
 
 # -----------------------------------------------------------------------------
-# Persistence (PVC for /var/lib/snappymail)
+# SnappyMail configuration overlay
+#
+# These values are rendered into a ConfigMap, mounted at
+# /etc/snappymail-overlay, and then copied into SnappyMail's data tree by
+# the container's entrypoint at boot. Both fields are optional — leave them
+# empty to let SnappyMail auto-bootstrap a default application.ini and
+# manage domains via the admin UI.
+#
+# `applicationIni` is the literal contents of application.ini. See
+# https://github.com/the-djmaze/snappymail/blob/master/snappymail/v/0.0.0/app/resources/settings/application.ini
+# for the full reference.
+#
+# `domains` is a map of <name> -> JSON object describing one IMAP/SMTP
+# domain. Each entry is written into _data_/_default_/domains/<name>.json.
 # -----------------------------------------------------------------------------
-persistence:
-  enabled: true
-  # Use the cluster default if empty.
-  storageClass: ""
-  accessModes:
-    - ReadWriteOnce
-  size: 2Gi
-  # Reuse an existing PVC instead of creating one.
-  existingClaim: ""
-  annotations: {}
+config:
+  applicationIni: ""
+  #   [webmail]
+  #   title = "My SnappyMail"
+  #   loading_description = "SnappyMail"
+  #
+  #   [security]
+  #   admin_login = "admin"
+  #   ...
+
+  domains: {}
+  #   example.com:
+  #     name: example.com
+  #     IMAP:
+  #       host: imap.example.com
+  #       port: 993
+  #       type: SSL/TLS
+  #     SMTP:
+  #       host: smtp.example.com
+  #       port: 587
+  #       type: STARTTLS
+  #       auth: true
+
+# -----------------------------------------------------------------------------
+# Admin login + password
+#
+# `login` is injected as $SNAPPYMAIL_ADMIN_LOGIN; the entrypoint patches it
+# into [security] admin_login of application.ini at boot.
+#
+# `password` is the cleartext admin password — it gets stored in a Secret,
+# mounted at /etc/snappymail-secret/admin_password, then bcrypt-hashed by
+# the entrypoint and patched into [security] admin_password.
+#
+# To use an externally-managed Secret instead (recommended for production
+# so the cleartext never lives in your values file), set `existingSecret`
+# to the Secret name and `existingSecretKey` to the key inside it that
+# holds the cleartext password.
+#
+# When neither `password` nor `existingSecret` is set, the container falls
+# back to its first-boot behavior: it generates a random password and
+# writes it to /var/lib/snappymail/_data_/_default_/admin_password.txt
+# inside the (ephemeral) emptyDir. NOTES.txt explains how to recover it.
+# -----------------------------------------------------------------------------
+admin:
+  login: ""
+  password: ""
+  existingSecret: ""
+  existingSecretKey: "admin_password"
 
 # -----------------------------------------------------------------------------
 # SnappyMail / runtime tunables exposed as environment variables.
@@ -174,7 +226,8 @@ probes:
     failureThreshold: 3
 
 # -----------------------------------------------------------------------------
-# HPA — only useful with RWX storage and replicaCount > 1.
+# HPA — note that SnappyMail isn't designed for clustered operation;
+# autoscaling is only safe behind sticky-session affinity.
 # -----------------------------------------------------------------------------
 autoscaling:
   enabled: false

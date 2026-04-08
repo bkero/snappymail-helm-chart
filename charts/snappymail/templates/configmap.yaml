@@ -1,0 +1,28 @@
+{{/*
+Overlay ConfigMap mounted into the pod at /etc/snappymail-overlay.
+
+ConfigMap keys can't contain '/', so we use flat keys here and let the
+deployment's `volumes[].configMap.items[]` block project them into the
+right layout (application.ini at the root, each domain as
+domains/<name>.json). The container's entrypoint then runs
+snappymail-config-overlay.php to copy them into the data tree.
+
+Rendered only when there is something to put in it.
+*/}}
+{{- if or .Values.config.applicationIni .Values.config.domains -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "snappymail.fullname" . }}-overlay
+  labels:
+    {{- include "snappymail.labels" . | nindent 4 }}
+data:
+  {{- with .Values.config.applicationIni }}
+  application.ini: |
+    {{- . | nindent 4 }}
+  {{- end }}
+  {{- range $name, $body := .Values.config.domains }}
+  {{ printf "domain.%s.json" $name }}: |-
+    {{- $body | toJson | nindent 4 }}
+  {{- end }}
+{{- end }}
