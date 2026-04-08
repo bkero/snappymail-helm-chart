@@ -1,0 +1,36 @@
+SnappyMail has been installed.
+
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "snappymail.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        Watch with:  kubectl get svc -w {{ include "snappymail.fullname" . }} -n {{ .Release.Namespace }}
+  export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "snappymail.fullname" . }} --template "{{ "{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}" }}")
+  echo http://$SERVICE_IP:{{ .Values.service.port }}
+{{- else if contains "ClusterIP" .Values.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "snappymail.fullname" . }} 8888:{{ .Values.service.port }}
+  Open http://127.0.0.1:8888 in your browser.
+{{- end }}
+
+2. Retrieve the auto-generated admin password (created on first boot):
+
+  POD=$(kubectl --namespace {{ .Release.Namespace }} get pod -l app.kubernetes.io/instance={{ .Release.Name }} -o jsonpath='{.items[0].metadata.name}')
+  kubectl --namespace {{ .Release.Namespace }} exec -it "$POD" -- cat /var/lib/snappymail/_data_/_default_/admin_password.txt
+
+   Then log into the admin panel at:    http(s)://<host>/?admin
+
+3. Configure your external IMAP/SMTP servers and (optionally) database from
+   the admin panel. This chart does not deploy a database or a mail server —
+   point SnappyMail at your existing services.
+
+4. Tunables can be set under .Values.env in values.yaml. See `helm show values
+   {{ .Chart.Name }}` for the full list.

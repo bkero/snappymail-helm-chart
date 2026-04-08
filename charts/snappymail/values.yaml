@@ -1,0 +1,207 @@
+# Default values for snappymail.
+# This file is in YAML and uses Helm-style templating in deployment.yaml.
+
+# -----------------------------------------------------------------------------
+# Image
+# -----------------------------------------------------------------------------
+image:
+  # Built and published by github.com/bkero/docker-snappymail.
+  repository: ghcr.io/bkero/docker-snappymail
+  # Defaults to .Chart.AppVersion if empty.
+  tag: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# -----------------------------------------------------------------------------
+# Replicas / update strategy
+#
+# SnappyMail keeps user-visible state (configs, contacts cache, file uploads)
+# on disk under /var/lib/snappymail. With ReadWriteOnce storage you must keep
+# replicaCount: 1. To run multiple replicas you need ReadWriteMany storage,
+# *and* you should be aware that SnappyMail is not designed for clustered
+# operation — sessions and file locking are best-effort.
+# -----------------------------------------------------------------------------
+replicaCount: 1
+
+# Recreate is safest with RWO PVCs. Switch to RollingUpdate when using RWX.
+strategy:
+  type: Recreate
+
+# -----------------------------------------------------------------------------
+# Service account
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+  automountServiceAccountToken: false
+
+# -----------------------------------------------------------------------------
+# Pod / container security
+# -----------------------------------------------------------------------------
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 82
+  runAsGroup: 82
+  fsGroup: 82
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 82
+  runAsGroup: 82
+  capabilities:
+    drop:
+      - ALL
+
+# -----------------------------------------------------------------------------
+# Service
+# -----------------------------------------------------------------------------
+service:
+  type: ClusterIP
+  port: 80
+  # The container always listens on 8888.
+  targetPort: 8888
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# Ingress
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+    # nginx.ingress.kubernetes.io/proxy-body-size: 25m
+  hosts:
+    - host: mail.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+    # - secretName: snappymail-tls
+    #   hosts:
+    #     - mail.example.com
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# -----------------------------------------------------------------------------
+# Persistence (PVC for /var/lib/snappymail)
+# -----------------------------------------------------------------------------
+persistence:
+  enabled: true
+  # Use the cluster default if empty.
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 2Gi
+  # Reuse an existing PVC instead of creating one.
+  existingClaim: ""
+  annotations: {}
+
+# -----------------------------------------------------------------------------
+# SnappyMail / runtime tunables exposed as environment variables.
+# These are consumed by the container's entrypoint.sh.
+# -----------------------------------------------------------------------------
+env:
+  UPLOAD_MAX_SIZE: "25M"
+  MEMORY_LIMIT: "128M"
+  PHP_TIMEZONE: "UTC"
+  PHP_FPM_PM: "ondemand"
+  PHP_FPM_MAX_CHILDREN: "30"
+  PHP_FPM_MAX_REQUESTS: "500"
+  SECURE_COOKIES: "true"
+  DEBUG: "false"
+
+# Free-form additional env vars (e.g. plugin secrets).
+# - name: SOMETHING
+#   valueFrom:
+#     secretKeyRef:
+#       name: snappymail-secrets
+#       key: something
+extraEnv: []
+
+# Reference whole ConfigMaps / Secrets as env sources.
+# - secretRef:
+#     name: snappymail-secrets
+extraEnvFrom: []
+
+# -----------------------------------------------------------------------------
+# Probes — all hit the cheap /ping endpoint exposed by nginx.
+# -----------------------------------------------------------------------------
+probes:
+  startup:
+    httpGet:
+      path: /ping
+      port: http
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 30
+  liveness:
+    httpGet:
+      path: /ping
+      port: http
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    httpGet:
+      path: /ping
+      port: http
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# -----------------------------------------------------------------------------
+# HPA — only useful with RWX storage and replicaCount > 1.
+# -----------------------------------------------------------------------------
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: ""
+
+# -----------------------------------------------------------------------------
+# Pod disruption budget
+# -----------------------------------------------------------------------------
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  # maxUnavailable: 1
+
+# -----------------------------------------------------------------------------
+# Scheduling
+# -----------------------------------------------------------------------------
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+priorityClassName: ""
+
+# -----------------------------------------------------------------------------
+# Extra volumes / mounts (e.g. mount a ConfigMap with a custom plugin).
+# -----------------------------------------------------------------------------
+extraVolumes: []
+extraVolumeMounts: []

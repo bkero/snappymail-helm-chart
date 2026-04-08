@@ -1,0 +1,18 @@
+# Local
+*.swp
+*.swo
+*~
+.DS_Store
+.idea/
+.vscode/
+
+# Helm packaging output
+*.tgz
+charts/*/charts/
+charts/*/Chart.lock
+.cr-release-packages/
+.cr-index/
+
+# Local overrides
+values.local.yaml
+*.secret.yaml
